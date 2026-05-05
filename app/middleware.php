@@ -1,10 +1,10 @@
 <?php
-
 declare(strict_types=1);
 
-use App\Application\Middleware\SessionMiddleware;
+use App\Application\Middleware\RateLimitMiddleware;
 use Slim\App;
 
 return function (App $app) {
-    $app->add(SessionMiddleware::class);
+    $app->addBodyParsingMiddleware();
+    $app->add(RateLimitMiddleware::class);
 };

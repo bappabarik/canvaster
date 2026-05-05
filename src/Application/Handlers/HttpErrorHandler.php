@@ -1,11 +1,11 @@
 <?php
-
 declare(strict_types=1);
 
 namespace App\Application\Handlers;
 
 use App\Application\Actions\ActionError;
 use App\Application\Actions\ActionPayload;
+use App\Application\Validation\ValidationException;
 use Psr\Http\Message\ResponseInterface as Response;
 use Slim\Exception\HttpBadRequestException;
 use Slim\Exception\HttpException;
@@ -19,19 +19,20 @@ use Throwable;
 
 class HttpErrorHandler extends SlimErrorHandler
 {
-    /**
-     * @inheritdoc
-     */
     protected function respond(): Response
     {
-        $exception = $this->exception;
+        $exception  = $this->exception;
         $statusCode = 500;
-        $error = new ActionError(
+        $error      = new ActionError(
             ActionError::SERVER_ERROR,
             'An internal error has occurred while processing your request.'
         );
 
-        if ($exception instanceof HttpException) {
+        if ($exception instanceof ValidationException) {
+            $statusCode = 422;
+            $error = (new ActionError(ActionError::VALIDATION_ERROR, 'Validation failed'))
+                ->setFields($exception->getErrors());
+        } elseif ($exception instanceof HttpException) {
             $statusCode = $exception->getCode();
             $error->setDescription($exception->getMessage());
 
@@ -48,17 +49,11 @@ class HttpErrorHandler extends SlimErrorHandler
             } elseif ($exception instanceof HttpNotImplementedException) {
                 $error->setType(ActionError::NOT_IMPLEMENTED);
             }
-        }
-
-        if (
-            !($exception instanceof HttpException)
-            && $exception instanceof Throwable
-            && $this->displayErrorDetails
-        ) {
+        } elseif ($exception instanceof Throwable && $this->displayErrorDetails) {
             $error->setDescription($exception->getMessage());
         }
 
-        $payload = new ActionPayload($statusCode, null, $error);
+        $payload        = new ActionPayload($statusCode, null, $error);
         $encodedPayload = json_encode($payload, JSON_PRETTY_PRINT);
 
         $response = $this->responseFactory->createResponse($statusCode);

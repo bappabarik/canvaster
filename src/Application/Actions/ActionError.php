@@ -50,12 +50,24 @@ class ActionError implements JsonSerializable
         return $this;
     }
 
+    private array $fields = [];
+
+    public function setFields(array $fields): self
+    {
+        $this->fields = $fields;
+        return $this;
+    }
+
     #[\ReturnTypeWillChange]
     public function jsonSerialize(): array
     {
-        return [
-            'type' => $this->type,
+        $payload = [
+            'type'        => $this->type,
             'description' => $this->description,
         ];
+        if (!empty($this->fields)) {
+            $payload['fields'] = $this->fields;
+        }
+        return $payload;
     }
 }
