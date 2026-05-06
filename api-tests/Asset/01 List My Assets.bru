@@ -1,0 +1,26 @@
+meta {
+  name: List My Assets
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/me/assets
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+docs {
+  Returns all uploaded assets for the logged-in user.
+  Grouped by asset_type: csv_file | row_image | zip_extract | template_bg
+
+  Optional query param:
+    ?type=csv_file       — only CSVs
+    ?type=row_image      — only images
+    ?type=zip_extract    — only ZIP extracted images
+    ?type=template_bg    — only template backgrounds
+}

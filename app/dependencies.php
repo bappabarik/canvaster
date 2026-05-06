@@ -65,5 +65,15 @@ return function (ContainerBuilder $containerBuilder) {
             return new \App\Application\Services\PlaceholderExtractor();
         },
 
+        \App\Application\Services\CsvParser::class => function () {
+            return new \App\Application\Services\CsvParser();
+        },
+
+        \App\Application\Services\CloudinaryService::class => function (ContainerInterface $c) {
+            return new \App\Application\Services\CloudinaryService(
+                $c->get(\App\Application\Settings\SettingsInterface::class)->get('cloudinary')
+            );
+        },
+
     ]);
 };

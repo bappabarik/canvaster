@@ -21,7 +21,7 @@ return function (ContainerBuilder $containerBuilder) {
                     'level' => Logger::DEBUG,
                 ],
                 'db' => [
-                    'host' => $_ENV['DB_HOST'] ?? '127.0.0.1',
+                    'host' => $_ENV['DB_HOST'],
                     'port' => $_ENV['DB_PORT'] ?? '3306',
                     'name' => $_ENV['DB_NAME'] ?? 'bdp',
                     'user' => $_ENV['DB_USER'] ?? 'root',

@@ -1,0 +1,15 @@
+meta {
+  name: 05 Submit Project
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/projects/{{projectId}}/submit
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}

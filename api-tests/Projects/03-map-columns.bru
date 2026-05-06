@@ -1,0 +1,25 @@
+meta {
+  name: 03 Map Columns
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/projects/{{projectId}}/map
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "column_map": {
+      "name": "Student Name",
+      "roll_no": "Roll Number",
+      "photo": "Photo Filename"
+    }
+  }
+}

@@ -1,0 +1,37 @@
+meta {
+  name: Upload CSV (Reuse Existing Asset)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/projects/{{projectId}}/csv
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "asset_id": 1
+  }
+}
+
+docs {
+  Reuse a previously uploaded CSV asset instead of uploading a new file.
+  Get asset_id from the List My Assets (CSV only) response.
+
+  On success returns:
+  {
+    "asset_id": 1,
+    "cloudinary_url": "https://res.cloudinary.com/...",
+    "original_filename": "students.csv",
+    "reused": true,
+    "headers": ["Student Name", "Roll Number", "Photo Filename"],
+    "total_rows": 5,
+    "preview": [...]
+  }
+}

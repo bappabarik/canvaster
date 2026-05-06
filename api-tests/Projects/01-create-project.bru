@@ -1,0 +1,29 @@
+meta {
+  name: 01 Create Project
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/projects
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "name": "Class 10A ID Cards",
+    "template_id": {{templateId}},
+    "output_format": "zip_png"
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.data) {
+    bru.setEnvVar("projectId", res.body.data.id.toString());
+  }
+}

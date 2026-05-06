@@ -14,6 +14,17 @@ use App\Application\Actions\Template\GalleryAction;
 use App\Application\Actions\Template\GetTemplateAction;
 use App\Application\Actions\Template\ListMyTemplatesAction;
 use App\Application\Actions\Template\UpdateTemplateAction;
+use App\Application\Actions\Project\CreateProjectAction;
+use App\Application\Actions\Project\GetProjectAction;
+use App\Application\Actions\Project\ListProjectsAction;
+use App\Application\Actions\Project\MapColumnsAction;
+use App\Application\Actions\Project\PreviewRowAction;
+use App\Application\Actions\Project\SubmitProjectAction;
+use App\Application\Actions\Project\UploadCsvAction;
+use App\Application\Actions\Project\UploadImagesAction;
+use App\Application\Actions\Asset\ListAssetsAction;
+use App\Application\Actions\Project\GetProjectStatusAction;
+use App\Application\Actions\Project\DownloadProjectAction;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use Slim\App;
@@ -44,6 +55,7 @@ return function (App $app) {
         $group->group('', function (Group $protected) {
             $protected->post('/auth/logout', LogoutAction::class);
             $protected->get('/auth/me',      MeAction::class);
+            $protected->get('/me/assets',    ListAssetsAction::class);
         })->add(JwtAuthMiddleware::class);
 
         // Protected template routes
@@ -54,6 +66,18 @@ return function (App $app) {
             $g->put('/{id}',   UpdateTemplateAction::class);
             $g->delete('/{id}', DeleteTemplateAction::class);
         })->add(JwtAuthMiddleware::class);
-        
+
+        $group->group('/projects', function (Group $g) {
+            $g->get('',                      ListProjectsAction::class);
+            $g->post('',                     CreateProjectAction::class);
+            $g->get('/{id}',                 GetProjectAction::class);
+            $g->post('/{id}/csv',            UploadCsvAction::class);
+            $g->post('/{id}/map',            MapColumnsAction::class);
+            $g->post('/{id}/images',         UploadImagesAction::class);
+            $g->get('/{id}/preview',         PreviewRowAction::class);
+            $g->post('/{id}/submit',         SubmitProjectAction::class);
+        })->add(JwtAuthMiddleware::class);
+
+
     });
 };

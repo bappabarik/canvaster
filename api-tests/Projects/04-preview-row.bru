@@ -1,0 +1,15 @@
+meta {
+  name: 04 Preview Row 0
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/projects/{{projectId}}/preview?row=0
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}

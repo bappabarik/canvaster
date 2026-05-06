@@ -1,0 +1,20 @@
+meta {
+  name: List My Assets (CSV only)
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/me/assets?type=csv_file
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+docs {
+  Returns only CSV assets for the logged-in user.
+  Useful for the "reuse existing CSV" dropdown when creating a new project.
+}
