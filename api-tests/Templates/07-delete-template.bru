@@ -1,0 +1,15 @@
+meta {
+  name: 07 Delete Template
+  type: http
+  seq: 7
+}
+
+delete {
+  url: {{baseUrl}}/templates/{{templateId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}

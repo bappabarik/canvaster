@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace App\Application\Validation;
@@ -20,6 +21,7 @@ class RequestValidator
         $clean  = [];
 
         foreach ($rules as $field => $rule) {
+            $fieldExists = array_key_exists($field, $data);
             $value = $data[$field] ?? null;
 
             if (is_string($value)) {
@@ -28,7 +30,10 @@ class RequestValidator
 
             try {
                 $rule->setName($field)->assert($value);
-                $clean[$field] = $value;
+                // Only include in $clean if field was actually sent
+                if ($fieldExists) {
+                    $clean[$field] = $value;
+                }
             } catch (NestedValidationException $e) {
                 $messages      = $e->getMessages();
                 $errors[$field] = reset($messages) ?: "Invalid {$field}";

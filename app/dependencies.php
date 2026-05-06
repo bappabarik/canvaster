@@ -61,5 +61,9 @@ return function (ContainerBuilder $containerBuilder) {
             );
         },
 
+        \App\Application\Services\PlaceholderExtractor::class => function () {
+            return new \App\Application\Services\PlaceholderExtractor();
+        },
+
     ]);
 };

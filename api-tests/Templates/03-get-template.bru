@@ -1,0 +1,15 @@
+meta {
+  name: 03 Get Template
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/templates/{{templateId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}

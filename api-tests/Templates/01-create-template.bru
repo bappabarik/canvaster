@@ -1,0 +1,31 @@
+meta {
+  name: 01 Create Template
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/templates
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "name": "School ID Card Basic",
+    "category": "id_card",
+    "canvas_json": "{\"version\":\"5.3.0\",\"objects\":[{\"type\":\"textbox\",\"text\":\"{name}\",\"left\":100,\"top\":50},{\"type\":\"textbox\",\"text\":\"{roll_no}\",\"left\":100,\"top\":100},{\"type\":\"image\",\"src\":\"{photo}\",\"left\":200,\"top\":50}]}",
+    "width_px": 800,
+    "height_px": 500
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.data) {
+    bru.setEnvVar("templateId", res.body.data.id.toString());
+  }
+}

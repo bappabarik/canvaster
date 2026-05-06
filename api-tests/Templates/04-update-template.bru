@@ -1,0 +1,22 @@
+meta {
+  name: 04 Update Template
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/templates/{{templateId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "name": "School ID Card Updated",
+    "canvas_json": "{\"version\":\"5.3.0\",\"objects\":[{\"type\":\"textbox\",\"text\":\"{name}\",\"left\":100,\"top\":50},{\"type\":\"textbox\",\"text\":\"{roll_no}\",\"left\":100,\"top\":100},{\"type\":\"textbox\",\"text\":\"{class}\",\"left\":100,\"top\":150},{\"type\":\"image\",\"src\":\"{photo}\",\"left\":200,\"top\":50}]}"
+  }
+}
