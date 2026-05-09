@@ -1,0 +1,29 @@
+meta {
+  name: 03 Verify Payment (after checkout)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/payments/verify
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "razorpay_order_id": "{{razorpayOrderId}}",
+    "razorpay_payment_id": "pay_test_xxxx",
+    "razorpay_signature": "test_signature"
+  }
+}
+
+docs {
+  In real flow, these three values come from the Razorpay checkout JS
+  handler after the user completes payment in the UPI app.
+  The signature will be invalid in test mode unless using real test keys.
+}

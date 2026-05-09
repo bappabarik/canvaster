@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 use App\Application\Settings\Settings;
@@ -16,8 +17,8 @@ return function (ContainerBuilder $containerBuilder) {
                 'logger' => [
                     'name'  => 'bdp-api',
                     'path'  => isset($_ENV['docker'])
-                                ? 'php://stdout'
-                                : __DIR__ . '/../logs/app.log',
+                        ? 'php://stdout'
+                        : __DIR__ . '/../logs/app.log',
                     'level' => Logger::DEBUG,
                 ],
                 'db' => [
@@ -41,6 +42,11 @@ return function (ContainerBuilder $containerBuilder) {
                     'guest_per_minute' => 60,
                     'user_per_minute'  => 300,
                     'auth_per_minute'  => 10,  // login/register brute-force protection
+                ],
+                'razorpay' => [
+                    'key_id'         => $_ENV['RAZORPAY_KEY_ID']         ?? '',
+                    'key_secret'     => $_ENV['RAZORPAY_KEY_SECRET']     ?? '',
+                    'webhook_secret' => $_ENV['RAZORPAY_WEBHOOK_SECRET'] ?? '',
                 ],
             ]);
         },

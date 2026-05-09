@@ -12,6 +12,8 @@ use App\Domain\Project\ProjectRepository;
 use App\Infrastructure\Persistence\Project\PdoProjectRepository;
 use App\Domain\Asset\AssetRepository;
 use App\Infrastructure\Persistence\Asset\PdoAssetRepository;
+use App\Domain\Payment\PaymentRepository;
+use App\Infrastructure\Persistence\Payment\PdoPaymentRepository;
 use DI\ContainerBuilder;
 use Psr\Container\ContainerInterface;
 
@@ -36,6 +38,10 @@ return function (ContainerBuilder $containerBuilder) {
 
         AssetRepository::class => function (ContainerInterface $c) {
             return new PdoAssetRepository($c->get(PDO::class));
+        },
+
+        PaymentRepository::class => function (ContainerInterface $c) {
+            return new PdoPaymentRepository($c->get(PDO::class));
         },
 
     ]);

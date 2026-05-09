@@ -75,5 +75,11 @@ return function (ContainerBuilder $containerBuilder) {
             );
         },
 
+        \App\Application\Services\RazorpayService::class => function (ContainerInterface $c) {
+            return new \App\Application\Services\RazorpayService(
+                $c->get(\App\Application\Settings\SettingsInterface::class)->get('razorpay')
+            );
+        },
+
     ]);
 };

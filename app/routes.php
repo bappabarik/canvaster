@@ -25,6 +25,10 @@ use App\Application\Actions\Project\UploadImagesAction;
 use App\Application\Actions\Asset\ListAssetsAction;
 use App\Application\Actions\Project\GetProjectStatusAction;
 use App\Application\Actions\Project\DownloadProjectAction;
+use App\Application\Actions\Payment\CreateOrderAction;
+use App\Application\Actions\Payment\ListPricingAction;
+use App\Application\Actions\Payment\VerifyPaymentAction;
+use App\Application\Actions\Payment\WebhookAction;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use Slim\App;
@@ -50,6 +54,11 @@ return function (App $app) {
 
         // Public gallery — no auth needed
         $group->get('/templates/gallery', GalleryAction::class);
+
+
+        // Public
+        $group->get('/pricing',           ListPricingAction::class);
+        $group->post('/payments/webhook', WebhookAction::class);
 
         // Protected routes
         $group->group('', function (Group $protected) {
@@ -78,6 +87,10 @@ return function (App $app) {
             $g->post('/{id}/submit',         SubmitProjectAction::class);
         })->add(JwtAuthMiddleware::class);
 
-
+        // Protected
+        $group->group('/payments', function (Group $g) {
+            $g->post('/create-order', CreateOrderAction::class);
+            $g->post('/verify',       VerifyPaymentAction::class);
+        })->add(JwtAuthMiddleware::class);
     });
 };
