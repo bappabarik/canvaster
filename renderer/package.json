@@ -1,0 +1,23 @@
+{
+  "name": "bdp-renderer",
+  "version": "1.0.0",
+  "description": "BDP bulk design renderer — Node.js + Puppeteer worker",
+  "main": "src/worker.js",
+  "scripts": {
+    "start": "node src/worker.js",
+    "render-one": "node src/render-one.js",
+    "dev": "node --watch src/worker.js"
+  },
+  "dependencies": {
+    "cloudinary": "^2.5.1",
+    "dotenv": "^16.4.5",
+    "mysql2": "^3.11.0",
+    "puppeteer": "^22.15.0"
+  },
+  "devDependencies": {
+    "fabric": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

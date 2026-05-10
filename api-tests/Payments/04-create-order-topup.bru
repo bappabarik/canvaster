@@ -1,0 +1,51 @@
+meta {
+  name: 04 Create Order (Credit Top-up, No Project)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/payments/create-order
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "tier_id": {{tierId}}
+  }
+}
+
+vars:pre-request {
+  tierId: 1
+}
+
+script:post-response {
+  if (res.body && res.body.data) {
+    bru.setEnvVar("topupOrderId", res.body.data.razorpay_order_id);
+  }
+}
+
+tests {
+  test("status is 201", function() {
+    expect(res.status).to.equal(201);
+  });
+  
+  test("project_id is null in payment record", function() {
+    expect(res.body.data.payment.project_id).to.be.null;
+  });
+  
+  test("order is created without project", function() {
+    expect(res.body.data.razorpay_order_id).to.match(/^order_/);
+  });
+}
+
+docs {
+  Tests the credit top-up flow — payment NOT tied to a specific project.
+  project_id is omitted from the request body.
+  The payment.project_id column should be NULL in the DB.
+}
