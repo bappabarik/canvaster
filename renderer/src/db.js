@@ -162,9 +162,15 @@ async function finalizeProject(projectId, status) {
 /**
  * Look up a Cloudinary URL for a row image by filename.
  * The renderer uses this to resolve {photo} placeholders.
+ *
+ * Resolution order:
+ *   1. Exact match on project_id + filename (ZIP uploaded to this project)
+ *   2. Fallback: match on user_id + filename (ZIP uploaded to a different project, reused)
  */
-async function findImageAsset(projectId, filename) {
+async function findImageAsset(projectId, filename, userId = null) {
     const db = getPool();
+
+    // 1. Project-scoped lookup (most common case)
     const [rows] = await db.execute(
         `SELECT cloudinary_url FROM uploaded_assets
          WHERE project_id = ?
@@ -173,7 +179,24 @@ async function findImageAsset(projectId, filename) {
          LIMIT 1`,
         [projectId, filename]
     );
-    return rows[0]?.cloudinary_url ?? null;
+
+    if (rows.length) return rows[0].cloudinary_url;
+
+    // 2. User-scoped fallback — finds the most recently uploaded matching file
+    if (userId) {
+        const [fallback] = await db.execute(
+            `SELECT cloudinary_url FROM uploaded_assets
+             WHERE user_id = ?
+               AND original_filename = ?
+               AND asset_type IN ('row_image', 'zip_extract')
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [userId, filename]
+        );
+        if (fallback.length) return fallback[0].cloudinary_url;
+    }
+
+    return null;
 }
 
 /**

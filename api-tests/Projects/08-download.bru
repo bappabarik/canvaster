@@ -1,0 +1,56 @@
+meta {
+  name: 08 Download Project (get ZIP URL)
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/projects/{{projectId}}/download
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("done project returns 200 with download_url", function() {
+    if (res.body.data && res.body.data.status === "done") {
+      expect(res.status).to.equal(200);
+      expect(res.body.data).to.have.property("download_url");
+      expect(res.body.data.download_url).to.include("cloudinary");
+    }
+  });
+
+  test("non-done project returns 400", function() {
+    if (res.status === 400) {
+      expect(res.body.error.type).to.equal("BAD_REQUEST");
+      expect(res.body.error.description).to.include("status");
+    }
+  });
+
+  test("response has project metadata", function() {
+    if (res.status === 200) {
+      const d = res.body.data;
+      expect(d).to.have.property("project_id");
+      expect(d).to.have.property("project_name");
+      expect(d).to.have.property("output_format");
+      expect(d).to.have.property("total_rows");
+      expect(d).to.have.property("rows_done");
+      expect(d).to.have.property("rows_failed");
+      expect(d).to.have.property("completed_at");
+    }
+  });
+}
+
+docs {
+  Returns the Cloudinary ZIP download URL for a completed project.
+  Only succeeds when project status = "done".
+
+  Run 07-get-status first and wait until status = "done",
+  then run this to get the download URL.
+
+  The download_url is a direct Cloudinary URL — open it in the
+  browser or use it in an <a href="..." download> tag on the frontend.
+}

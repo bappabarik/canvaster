@@ -1,0 +1,74 @@
+meta {
+  name: 07 Get Project Status (poll)
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/projects/{{projectId}}/status
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("has required polling fields", function() {
+    const d = res.body.data;
+    expect(d).to.have.property("project_id");
+    expect(d).to.have.property("status");
+    expect(d).to.have.property("total_rows");
+    expect(d).to.have.property("rows_done");
+    expect(d).to.have.property("rows_failed");
+    expect(d).to.have.property("progress_pct");
+    expect(d).to.have.property("output_zip_url");
+  });
+
+  test("progress_pct is 0-100", function() {
+    const pct = res.body.data.progress_pct;
+    expect(pct).to.be.at.least(0);
+    expect(pct).to.be.at.most(100);
+  });
+
+  test("status is a valid project status", function() {
+    const valid = ["draft","pending_payment","queued","processing","done","failed"];
+    expect(valid).to.include(res.body.data.status);
+  });
+
+  test("output_zip_url is set when done", function() {
+    if (res.body.data.status === "done") {
+      expect(res.body.data.output_zip_url).to.be.a("string");
+      expect(res.body.data.output_zip_url).to.include("cloudinary");
+    }
+  });
+}
+
+docs {
+  Lightweight status polling endpoint.
+  Call this every 2-3 seconds while status is "queued" or "processing".
+  Stop polling when status is "done" or "failed".
+
+  Frontend polling pattern:
+    async function pollStatus(projectId) {
+      const res = await fetch(`/api/v1/projects/${projectId}/status`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const { data } = await res.json();
+
+      updateProgressBar(data.progress_pct);
+
+      if (data.status === 'done') {
+        showDownloadButton(data.output_zip_url);
+      } else if (data.status === 'failed') {
+        showError(`${data.rows_failed} rows failed`);
+      } else {
+        setTimeout(() => pollStatus(projectId), 3000);
+      }
+    }
+}

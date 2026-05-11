@@ -2,24 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BDP Renderer</title>
-
-  <!--
-    Fabric.js is loaded from the local node_modules so the renderer
-    works fully offline and version is locked to what the editor uses.
-    Puppeteer sets a custom protocol handler so file:// and
-    __dirname-relative paths both work.
-  -->
   <script src="./fabric.min.js"></script>
-
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body {
-      /* Size is set dynamically by initCanvas() below */
-      background: transparent;
-      overflow: hidden;
-    }
+    html, body { background: white; overflow: hidden; }
     canvas { display: block; }
   </style>
 </head>
@@ -27,34 +14,62 @@
   <canvas id="c"></canvas>
 
   <script>
-    // ── Renderer API ───────────────────────────────────────────────────────────
-    // Puppeteer calls window.renderRow(job) and awaits window.__bdpDone.
-    // On success:  window.__bdpDone = { ok: true }
-    // On failure:  window.__bdpDone = { ok: false, error: '...' }
+    window.__bdpDone         = null;
+    window.__bdpFabricCanvas = null;
 
-    window.__bdpDone = null;
+    // 1×1 transparent PNG — used as a dummy src so Fabric.js can
+    // deserialise image objects whose src is a {placeholder} token.
+    // We swap in the real image after loadFromJSON completes.
+    const BLANK_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
-    /**
-     * Main entry point called by Puppeteer after page load.
-     *
-     * @param {Object} job
-     * @param {string} job.canvasJson          - Fabric.js serialized canvas
-     * @param {Object} job.resolvedData        - { placeholder: value } for this row
-     * @param {number} job.width               - Canvas width in px
-     * @param {number} job.height              - Canvas height in px
-     * @param {Object} job.imageMap            - { filename: cloudinaryUrl } for photo placeholders
-     */
+    // Regex that matches any "{placeholder}" value inside a JSON string
+    const PLACEHOLDER_SRC_RE = /"src"\s*:\s*"(\{[a-zA-Z_][a-zA-Z0-9_]*\})"/g;
+
+    function loadImage(url) {
+      return new Promise(resolve => {
+        fabric.Image.fromURL(
+          url,
+          img => resolve(img || null),
+          { crossOrigin: 'anonymous' }
+        );
+      });
+    }
+
     window.renderRow = async function(job) {
       try {
         const { canvasJson, resolvedData, width, height, imageMap = {} } = job;
 
-        // 1. Size the page exactly to canvas dimensions
+        console.log('[bdp] renderRow called, width=' + width + ' height=' + height);
+        console.log('[bdp] resolvedData keys: ' + Object.keys(resolvedData).join(', '));
+        console.log('[bdp] imageMap keys: ' + Object.keys(imageMap).join(', '));
+
+        // ── 1. Size the page ──────────────────────────────────────────────────
         document.documentElement.style.width  = width  + 'px';
         document.documentElement.style.height = height + 'px';
-        document.body.style.width  = width  + 'px';
-        document.body.style.height = height + 'px';
+        document.body.style.width             = width  + 'px';
+        document.body.style.height            = height + 'px';
 
-        // 2. Create the Fabric canvas
+        // ── 2. Pre-process canvas JSON ────────────────────────────────────────
+        // Find every image object whose src is a {placeholder} token.
+        // Replace the src with a blank PNG so Fabric.js loads it without error.
+        // Store the original placeholder in a custom property so we can swap
+        // the real image after loadFromJSON.
+        const placeholderMap = {}; // { fabricObjectIndex → placeholderKey }
+
+        let objectIndex = -1;
+        const patchedJson = canvasJson.replace(
+          // Match any object block that contains a placeholder src
+          // We do a simple string replacement on the src field
+          PLACEHOLDER_SRC_RE,
+          (match, placeholder) => {
+            console.log('[bdp] Pre-patch: found placeholder src ' + placeholder);
+            // Store placeholder → will match by position after load
+            // We embed the key into a custom property in the JSON too
+            return '"src":"' + BLANK_PNG + '","_placeholderSrc":"' + placeholder + '"';
+          }
+        );
+
+        // ── 3. Set up Fabric canvas ───────────────────────────────────────────
         const canvasEl = document.getElementById('c');
         canvasEl.width  = width;
         canvasEl.height = height;
@@ -63,106 +78,118 @@
           width,
           height,
           renderOnAddRemove: false,
-          selection: false,
-          skipTargetFind: true,
+          selection:         false,
+          skipTargetFind:    true,
         });
-
-        // Expose for debug inspection from Node
         window.__bdpFabricCanvas = fabricCanvas;
 
-        // 3. Load canvas JSON
-        console.log('[bdp] Loading canvas JSON, length:', canvasJson.length);
+        // ── 4. Load patched JSON (no more 404s) ───────────────────────────────
+        console.log('[bdp] Loading canvas JSON, length=' + patchedJson.length);
         await new Promise((resolve, reject) => {
-          try {
-            fabricCanvas.loadFromJSON(canvasJson, () => {
-              console.log('[bdp] loadFromJSON complete, objects:', fabricCanvas.getObjects().length);
+          fabricCanvas.loadFromJSON(
+            patchedJson,
+            () => {
+              console.log('[bdp] loadFromJSON complete, objects=' + fabricCanvas.getObjects().length);
               resolve();
-            }, (o, obj) => {
-              if (!obj) console.warn('[bdp] Failed to deserialize one object:', JSON.stringify(o));
-            });
-          } catch (e) {
-            reject(new Error('loadFromJSON threw: ' + (e && e.message ? e.message : String(e))));
-          }
+            },
+            (o, obj) => {
+              if (!obj) console.warn('[bdp] Failed to deserialise: ' + JSON.stringify(o).slice(0, 120));
+            }
+          );
         });
 
-        // 4. Walk every object and substitute placeholders
-        const objects = fabricCanvas.getObjects();
-        const placeholderRe = /\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
+        // ── 5. Substitute placeholders ────────────────────────────────────────
+        const textPlaceholderRe = /\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
+        const objects           = fabricCanvas.getObjects();
+        const imageSwaps        = [];
 
         for (const obj of objects) {
-          // ── Text objects: replace {placeholder} tokens in text ──────────────
+
+          // ── Text ────────────────────────────────────────────────────────────
           if (obj.type === 'textbox' || obj.type === 'text' || obj.type === 'i-text') {
             const original = obj.text || '';
-            const replaced = original.replace(placeholderRe, (_, key) => {
-              return key in resolvedData ? (resolvedData[key] ?? '') : `{${key}}`;
-            });
+            const replaced = original.replace(textPlaceholderRe, (_, key) =>
+              key in resolvedData ? String(resolvedData[key] ?? '') : `{${key}}`
+            );
             if (replaced !== original) {
               obj.set('text', replaced);
+              console.log('[bdp] Replaced text placeholder → "' + replaced.slice(0, 60) + '"');
             }
           }
 
-          // ── Image objects: replace {placeholder} src with Cloudinary URL ───
+          // ── Image ───────────────────────────────────────────────────────────
           if (obj.type === 'image') {
-            const src = obj.getSrc ? obj.getSrc() : (obj._element && obj._element.src) || '';
-            const match = src.match(/^\{([a-zA-Z_][a-zA-Z0-9_]*)\}$/);
+            // Retrieve the placeholder we embedded as a custom property
+            const placeholderSrc = obj._placeholderSrc || obj.get('_placeholderSrc') || '';
+            const keyMatch = placeholderSrc.match(/^\{([a-zA-Z_][a-zA-Z0-9_]*)\}$/);
 
-            if (match) {
-              const key = match[1];
-              let imageUrl = null;
-
-              const val = resolvedData[key] || '';
-
-              // Direct URL in the CSV value
-              if (val.startsWith('http')) {
-                imageUrl = val;
-              }
-              // Filename → look it up in the imageMap built by Node
-              else if (val && imageMap[val]) {
-                imageUrl = imageMap[val];
-              }
-
-              if (imageUrl) {
-                await new Promise((resolve) => {
-                  fabric.Image.fromURL(imageUrl, (img) => {
-                    if (!img) { resolve(); return; }
-
-                    img.set({
-                      left:    obj.left,
-                      top:     obj.top,
-                      scaleX:  obj.scaleX,
-                      scaleY:  obj.scaleY,
-                      angle:   obj.angle,
-                      originX: obj.originX,
-                      originY: obj.originY,
-                    });
-
-                    if (obj.width && obj.height) {
-                      const scaleX = (obj.width  * obj.scaleX) / img.width;
-                      const scaleY = (obj.height * obj.scaleY) / img.height;
-                      const scale  = Math.max(scaleX, scaleY);
-                      img.set({ scaleX: scale, scaleY: scale });
-                    }
-
-                    const idx = fabricCanvas.getObjects().indexOf(obj);
-                    fabricCanvas.remove(obj);
-                    fabricCanvas.insertAt(img, idx);
-                    resolve();
-                  }, { crossOrigin: 'anonymous' });
-                });
-              }
+            if (!keyMatch) {
+              console.log('[bdp] Image obj has no placeholder — leaving as-is');
+              continue;
             }
+
+            const key = keyMatch[1];
+            const val = String(resolvedData[key] || '');
+            let imageUrl = null;
+
+            if (val.startsWith('http://') || val.startsWith('https://')) {
+              imageUrl = val;
+            } else if (val && imageMap[val]) {
+              imageUrl = imageMap[val];
+            }
+
+            console.log('[bdp] Image placeholder {' + key + '} val="' + val + '" → ' + (imageUrl || '(no URL)'));
+
+            if (!imageUrl) continue;
+
+            const targetObj = obj;
+            const url       = imageUrl;
+
+            const swap = (async () => {
+              const img = await loadImage(url);
+              if (!img) {
+                console.warn('[bdp] Failed to load image: ' + url);
+                return;
+              }
+
+              img.set({
+                left:    targetObj.left,
+                top:     targetObj.top,
+                angle:   targetObj.angle   || 0,
+                originX: targetObj.originX || 'left',
+                originY: targetObj.originY || 'top',
+                opacity: targetObj.opacity !== undefined ? targetObj.opacity : 1,
+              });
+
+              // Scale to fill the placeholder bounding box (cover behaviour)
+              if (targetObj.width && targetObj.height) {
+                const scaleX = (targetObj.width  * (targetObj.scaleX || 1)) / img.width;
+                const scaleY = (targetObj.height * (targetObj.scaleY || 1)) / img.height;
+                img.set({ scaleX: Math.max(scaleX, scaleY), scaleY: Math.max(scaleX, scaleY) });
+              }
+
+              const idx = fabricCanvas.getObjects().indexOf(targetObj);
+              fabricCanvas.remove(targetObj);
+              fabricCanvas.insertAt(img, idx >= 0 ? idx : fabricCanvas.getObjects().length);
+              console.log('[bdp] Image swapped at index ' + idx);
+            })();
+
+            imageSwaps.push(swap);
           }
         }
 
-        // 5. Render the canvas
-        console.log('[bdp] Calling renderAll, objects:', fabricCanvas.getObjects().length);
+        await Promise.all(imageSwaps);
+
+        // ── 6. Render ─────────────────────────────────────────────────────────
+        console.log('[bdp] Calling renderAll, objects=' + fabricCanvas.getObjects().length);
         fabricCanvas.renderAll();
 
-        // 6. Signal success
+        console.log('[bdp] Render complete — signalling done');
         window.__bdpDone = { ok: true };
 
       } catch (err) {
-        const msg = (err && err.message) ? err.message : String(err);
+        const msg = err && err.message ? err.message : String(err);
+        console.error('[bdp] RENDER ERROR: ' + msg);
         window.__bdpDone = { ok: false, error: msg };
       }
     };

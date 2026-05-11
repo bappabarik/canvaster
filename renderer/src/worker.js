@@ -76,21 +76,17 @@ async function processJob(job) {
             const rowFile = path.join(jobTmpDir, `row_${String(rowIndex).padStart(6, '0')}.${ext}`);
 
             try {
-                // Build imageMap: for placeholder keys whose resolved value looks like
-                // an image filename, look up the Cloudinary URL from uploaded_assets.
-                // Only check the placeholder that maps to an image column — don't
-                // scan every CSV value.
-                const imageMap = {};
+                // Build imageMap — only filenames with image extensions
+                const imageMap       = {};
                 const imageExtensions = /\.(jpg|jpeg|png|gif|webp)$/i;
 
-                for (const [placeholder, csvHeader] of Object.entries(columnMap)) {
+                for (const [, csvHeader] of Object.entries(columnMap)) {
                     const value = rawRowData[csvHeader];
                     if (value && imageExtensions.test(value)) {
-                        const url = await db.findImageAsset(projectId, value);
+                        const url = await db.findImageAsset(projectId, value, job.user_id);
                         if (url) {
                             imageMap[value] = url;
                         } else {
-                            // No uploaded asset found — log but continue (image placeholder will be blank)
                             console.warn(`No asset found for filename "${value}" in project ${projectId}`);
                         }
                     }

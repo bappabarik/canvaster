@@ -1,0 +1,88 @@
+meta {
+  name: 04 Upload Image ZIP
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/projects/{{projectId}}/images
+  body: multipartForm
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:multipart-form {
+  images: @file(./test-data/student-photos.zip)
+}
+
+tests {
+  test("status is 201", function() {
+    expect(res.status).to.equal(201);
+  });
+
+  test("returns uploaded count", function() {
+    expect(res.body.data.uploaded_count).to.be.a("number");
+    expect(res.body.data.uploaded_count).to.be.greaterThan(0);
+  });
+
+  test("returns filenames list", function() {
+    expect(res.body.data.filenames).to.be.an("array");
+    expect(res.body.data.filenames.length).to.equal(res.body.data.uploaded_count);
+  });
+
+  test("returns match report", function() {
+    const report = res.body.data.match_report;
+    expect(report).to.have.property("total_rows");
+    expect(report).to.have.property("rows_with_image");
+    expect(report).to.have.property("unmatched_files");
+    expect(report).to.have.property("fully_matched");
+  });
+
+  test("match report shows fully matched when filenames align with CSV", function() {
+    // Only passes if your ZIP filenames exactly match the CSV Photo Filename column
+    // e.g. CSV has "john_doe.jpg" and ZIP contains "john_doe.jpg"
+    const report = res.body.data.match_report;
+    if (report.fully_matched) {
+      expect(report.unmatched_count).to.equal(0);
+    } else {
+      console.log("Unmatched files:", report.unmatched_files);
+      console.log("These CSV values have no matching image in the ZIP");
+    }
+  });
+}
+
+docs {
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  IMAGE SUPPLY — TWO MODES                                    ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║                                                              ║
+  ║  MODE A — Direct URLs in CSV                                 ║
+  ║    CSV column "Photo Filename" contains:                     ║
+  ║      https://res.cloudinary.com/mycloud/image/john.jpg       ║
+  ║    → Renderer fetches the URL directly. No ZIP needed.       ║
+  ║    → Skip this endpoint entirely.                            ║
+  ║                                                              ║
+  ║  MODE B — Filenames in CSV + ZIP upload (this endpoint)      ║
+  ║    CSV column "Photo Filename" contains: john_doe.jpg        ║
+  ║    Upload a ZIP containing: john_doe.jpg, jane_smith.jpg...  ║
+  ║    → Renderer matches filename → Cloudinary URL at render    ║
+  ║                                                              ║
+  ║  MATCHING RULES:                                             ║
+  ║    - Match is case-sensitive: "John.jpg" ≠ "john.jpg"        ║
+  ║    - Match is exact filename: "photos/john.jpg" ≠ "john.jpg" ║
+  ║    - Nested folders in ZIP are flattened (only filename used) ║
+  ║    - Supported formats: jpg, jpeg, png, gif, webp            ║
+  ║                                                              ║
+  ║  HOW TO CREATE THE TEST ZIP:                                 ║
+  ║    Put these files in a folder and zip it:                   ║
+  ║      john_doe.jpg                                            ║
+  ║      jane_smith.jpg                                          ║
+  ║      raj_kumar.jpg                                           ║
+  ║      priya_patel.jpg                                         ║
+  ║      amit_shah.jpg                                           ║
+  ║    (names must match "Photo Filename" column in students.csv) ║
+  ╚══════════════════════════════════════════════════════════════╝
+}

@@ -7,8 +7,6 @@ const puppeteer = require('puppeteer');
 const config    = require('./config');
 
 // ── Local HTTP server for the render template ─────────────────────────────────
-// Serving via http:// instead of file:// means Cloudinary image URLs
-// load without needing --disable-web-security.
 let templateServer = null;
 let templatePort   = 0;
 
@@ -19,27 +17,35 @@ async function getTemplateServer() {
 
     return new Promise((resolve, reject) => {
         templateServer = http.createServer((req, res) => {
-            // Only serve files from the template directory
-            const safeName = path.basename(req.url.split('?')[0]) || 'index.html';
+            // Strip query string and leading slash safely
+            const urlPath  = req.url.split('?')[0].replace(/^\/+/, '') || 'index.html';
+            // Prevent directory traversal
+            const safeName = path.basename(urlPath) || 'index.html';
             const filePath = path.join(templateDir, safeName);
 
             if (!fs.existsSync(filePath)) {
-                res.writeHead(404); res.end('Not found'); return;
+                res.writeHead(404);
+                res.end('Not found: ' + safeName);
+                return;
             }
 
-            const ext = path.extname(filePath).toLowerCase();
+            const ext  = path.extname(filePath).toLowerCase();
             const mime = {
                 '.html': 'text/html',
                 '.js':   'application/javascript',
                 '.css':  'text/css',
             }[ext] || 'application/octet-stream';
 
-            res.writeHead(200, { 'Content-Type': mime });
+            res.writeHead(200, {
+                'Content-Type':  mime,
+                'Cache-Control': 'no-store',
+            });
             fs.createReadStream(filePath).pipe(res);
         });
 
         templateServer.listen(0, '127.0.0.1', () => {
             templatePort = templateServer.address().port;
+            console.log(`[renderer] Template server listening on port ${templatePort}`);
             resolve(templatePort);
         });
 
@@ -49,8 +55,11 @@ async function getTemplateServer() {
 
 function closeTemplateServer() {
     return new Promise(resolve => {
-        if (templateServer) { templateServer.close(resolve); templateServer = null; }
-        else resolve();
+        if (templateServer) {
+            templateServer.close(() => { templateServer = null; resolve(); });
+        } else {
+            resolve();
+        }
     });
 }
 
@@ -66,19 +75,19 @@ async function getBrowser() {
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
-                '--disable-features=VizDisplayCompositor',  // Windows stability
+                '--disable-features=VizDisplayCompositor',
                 '--disable-background-timer-throttling',
                 '--disable-backgrounding-occluded-windows',
                 '--disable-renderer-backgrounding',
+                // Allow loading images from Cloudinary (cross-origin)
+                '--disable-web-security',
+                '--allow-running-insecure-content',
             ],
         });
     }
     return browser;
 }
 
-/**
- * Close the browser. Called after a job completes or on worker shutdown.
- */
 async function closeBrowser() {
     if (browser) {
         await browser.close().catch(() => {});
@@ -88,11 +97,10 @@ async function closeBrowser() {
 }
 
 /**
- * Resolve row data by applying the column_map to the raw CSV row data.
- *
- * column_map:   { "name": "Student Name", "photo": "Photo Filename" }
- * row.data:     { "Student Name": "John", "Photo Filename": "john.jpg" }
- * → resolved:   { "name": "John", "photo": "john.jpg" }
+ * Resolve row data by applying column_map to raw CSV row data.
+ * column_map:  { "name": "Student Name", "photo": "Photo Filename" }
+ * rawRowData:  { "Student Name": "John", "Photo Filename": "john.jpg" }
+ * → resolved:  { "name": "John", "photo": "john.jpg" }
  */
 function resolveRowData(rawData, columnMap) {
     const resolved = {};
@@ -104,18 +112,6 @@ function resolveRowData(rawData, columnMap) {
 
 /**
  * Render a single row to a PNG or PDF file.
- *
- * @param {Object} params
- * @param {string} params.canvasJson        - Fabric.js canvas JSON string
- * @param {Object} params.columnMap         - { placeholder → csvHeader }
- * @param {Object} params.rawRowData        - Raw CSV row { csvHeader → value }
- * @param {number} params.widthPx
- * @param {number} params.heightPx
- * @param {Object} params.imageMap          - { filename → cloudinaryUrl }
- * @param {'png'|'pdf'|'zip_png'|'zip_pdf'} params.outputFormat
- * @param {string} params.outputPath        - Absolute path to write the output file
- *
- * @returns {Promise<void>}
  */
 async function renderRow({
     canvasJson,
@@ -131,26 +127,25 @@ async function renderRow({
     const page = await br.newPage();
 
     try {
-        // Set viewport to exact canvas size (critical for screenshot accuracy)
-        await page.setViewport({ width: widthPx, height: heightPx, deviceScaleFactor: 2 });
+        // FIX 1: deviceScaleFactor: 1 so screenshot pixels match canvas pixels exactly.
+        // Using 2 doubles the image dimensions and breaks the output size.
+        await page.setViewport({ width: widthPx, height: heightPx, deviceScaleFactor: 1 });
 
-        // Load the render template via local HTTP server (avoids CORS on Cloudinary images)
-        const port = await getTemplateServer();
+        const port        = await getTemplateServer();
         const templateUrl = `http://127.0.0.1:${port}/index.html`;
+
         await page.goto(templateUrl, { waitUntil: 'networkidle0', timeout: 30_000 });
 
-        // Bridge browser console.log → Node stdout for debugging
+        // Forward browser logs to Node stdout
         page.on('console', msg => {
             console.log(`  [browser ${msg.type()}] ${msg.text()}`);
         });
         page.on('pageerror', err => {
-            console.error(`  [browser error] ${err.message}`);
+            console.error(`  [browser pageerror] ${err.message}`);
         });
 
-        // Resolve row data
         const resolvedData = resolveRowData(rawRowData, columnMap);
 
-        // Build the job payload for the page
         const job = {
             canvasJson,
             resolvedData,
@@ -159,52 +154,72 @@ async function renderRow({
             imageMap,
         };
 
-        // Call window.renderRow() inside the page
-        await page.evaluate((j) => window.renderRow(j), job);
+        // FIX 2: Kick off the render but don't await it here — it signals
+        // completion via window.__bdpDone which we poll below.
+        await page.evaluate((j) => {
+            window.__bdpDone = null;   // reset in case of page reuse
+            window.renderRow(j);       // intentionally not awaited inside evaluate
+        }, job);
 
-        // Wait for rendering to complete (max 15 seconds)
-        const result = await page.waitForFunction(
-            () => window.__bdpDone !== null,
-            { timeout: 15_000 }
+        // FIX 3: Poll for completion. waitForFunction returns a JSHandle
+        // wrapping the return value of the predicate, not the window value.
+        // We need to explicitly return the __bdpDone object from the predicate.
+        const doneHandle = await page.waitForFunction(
+            () => window.__bdpDone !== null ? window.__bdpDone : false,
+            { timeout: 20_000, polling: 100 }
         );
 
-        const done = await result.jsonValue();
-        if (!done) {
-            throw new Error(`Canvas render error: ${done.error}`);
+        // FIX 4: jsonValue() gives us the actual {ok, error} object.
+        const done = await doneHandle.jsonValue();
+
+        if (!done || !done.ok) {
+            const errMsg = (done && done.error) ? done.error : 'Unknown render error';
+            throw new Error(`Canvas render failed: ${errMsg}`);
         }
 
-        // Debug: report how many objects Fabric loaded
+        // Allow a short settle for any async image loads inside Fabric
+        await new Promise(r => setTimeout(r, 200));
+
+        // Debug: report how many Fabric objects were rendered
         const objectCount = await page.evaluate(() => {
             const c = window.__bdpFabricCanvas;
             return c ? c.getObjects().length : -1;
-        });
-        console.log(`  [renderer] Fabric objects loaded: ${objectCount}`);
-
-        // Small settle time for image loads — usually instant but safe guard
-        await new Promise(r => setTimeout(r, 150));
+        }).catch(() => -1);
+        console.log(`  [renderer] Fabric objects: ${objectCount}`);
 
         const isPdf = outputFormat === 'pdf' || outputFormat === 'zip_pdf';
 
         if (isPdf) {
-            // PDF output — full-bleed, no margins
             const pdfBuffer = await page.pdf({
-                width:             `${widthPx}px`,
-                height:            `${heightPx}px`,
-                printBackground:   true,
-                margin:            { top: 0, right: 0, bottom: 0, left: 0 },
+                width:           `${widthPx}px`,
+                height:          `${heightPx}px`,
+                printBackground: true,
+                margin:          { top: 0, right: 0, bottom: 0, left: 0 },
             });
             fs.writeFileSync(outputPath, pdfBuffer);
         } else {
-            // PNG output — clip to exact canvas dimensions
+            // FIX 5: Screenshot the canvas element directly with exact clip rect.
+            // This is more reliable than page.screenshot() which can grab
+            // extra whitespace, and avoids issues with deviceScaleFactor.
             const canvasEl = await page.$('#c');
-            if (!canvasEl) throw new Error('Canvas element not found in rendered page');
-
-            await canvasEl.screenshot({
-                path: outputPath,
-                type: 'png',
-                omitBackground: false,
-            });
+            if (!canvasEl) {
+                // Fallback: screenshot the viewport clipped to canvas size
+                await page.screenshot({
+                    path: outputPath,
+                    type: 'png',
+                    clip: { x: 0, y: 0, width: widthPx, height: heightPx },
+                });
+            } else {
+                await canvasEl.screenshot({
+                    path: outputPath,
+                    type: 'png',
+                    omitBackground: false,
+                });
+            }
         }
+
+        console.log(`  [renderer] Written to ${outputPath}`);
+
     } finally {
         await page.close().catch(() => {});
     }
