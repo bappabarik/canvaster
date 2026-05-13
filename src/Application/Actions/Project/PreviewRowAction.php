@@ -4,8 +4,10 @@ declare(strict_types=1);
 namespace App\Application\Actions\Project;
 
 use App\Application\Actions\Action;
+use App\Domain\Asset\AssetRepository;
 use App\Domain\Project\ProjectRepository;
 use App\Domain\User\User;
+use PDO;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Log\LoggerInterface;
 use Slim\Exception\HttpBadRequestException;
@@ -14,8 +16,10 @@ use Slim\Exception\HttpNotFoundException;
 class PreviewRowAction extends Action
 {
     public function __construct(
-        LoggerInterface   $logger,
+        LoggerInterface         $logger,
         private ProjectRepository $projects,
+        private AssetRepository   $assets,
+        private PDO               $pdo,
     ) {
         parent::__construct($logger);
     }
@@ -42,20 +46,65 @@ class PreviewRowAction extends Action
             throw new HttpNotFoundException($this->request, "Row {$rowIndex} not found");
         }
 
-        $rowData   = json_decode($row['data'], true);
+        $rawData   = json_decode($row['data'], true);
         $columnMap = $project->getColumnMap();
 
-        // Apply column map: replace placeholder keys with actual CSV values
+        // Resolve placeholder keys → CSV values
         $resolved = [];
         foreach ($columnMap as $placeholder => $csvHeader) {
-            $resolved[$placeholder] = $rowData[$csvHeader] ?? null;
+            $resolved[$placeholder] = $rawData[$csvHeader] ?? null;
+        }
+
+        // Build imageMap: for any resolved value that looks like an image filename,
+        // find its Cloudinary URL from uploaded_assets so the frontend can render it
+        $imageMap       = [];
+        $imageExtensions = '/\.(jpg|jpeg|png|gif|webp)$/i';
+
+        foreach ($resolved as $placeholder => $value) {
+            if (!$value || !preg_match($imageExtensions, (string) $value)) continue;
+
+            // Check project-scoped assets first, then user-level fallback
+            $stmt = $this->pdo->prepare(
+                'SELECT cloudinary_url FROM uploaded_assets
+                 WHERE project_id = ? AND original_filename = ?
+                   AND asset_type IN ("row_image", "zip_extract")
+                 LIMIT 1'
+            );
+            $stmt->execute([$projectId, $value]);
+            $url = $stmt->fetchColumn();
+
+            if (!$url) {
+                // Fallback: any asset this user owns with the same filename
+                $stmt = $this->pdo->prepare(
+                    'SELECT cloudinary_url FROM uploaded_assets
+                     WHERE user_id = ? AND original_filename = ?
+                       AND asset_type IN ("row_image", "zip_extract")
+                     ORDER BY created_at DESC LIMIT 1'
+                );
+                $stmt->execute([$user->getId(), $value]);
+                $url = $stmt->fetchColumn();
+            }
+
+            if ($url) {
+                $imageMap[$value] = $url;
+            }
+        }
+
+        // Also replace direct HTTP URLs in resolved data into imageMap
+        foreach ($resolved as $placeholder => $value) {
+            if ($value && (str_starts_with((string) $value, 'http://') || str_starts_with((string) $value, 'https://'))) {
+                $imageMap[$value] = $value;
+            }
         }
 
         return $this->respondWithData([
-            'row_index'     => $rowIndex,
-            'total_rows'    => $project->getTotalRows(),
-            'resolved_data' => $resolved,
+            'row_index'            => $rowIndex,
+            'total_rows'           => $project->getTotalRows(),
+            'resolved_data'        => $resolved,
+            'image_map'            => $imageMap,
             'canvas_snapshot_json' => $project->getCanvasSnapshotJson(),
+            'width_px'             => 800,  // will be read from template in future
+            'height_px'            => 500,
         ]);
     }
 }

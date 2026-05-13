@@ -29,6 +29,7 @@ use App\Application\Actions\Payment\CreateOrderAction;
 use App\Application\Actions\Payment\ListPricingAction;
 use App\Application\Actions\Payment\VerifyPaymentAction;
 use App\Application\Actions\Payment\WebhookAction;
+use App\Application\Actions\Payment\UseCreditsAction;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use Slim\App;
@@ -90,6 +91,7 @@ return function (App $app) {
         $group->group('/payments', function (Group $g) {
             $g->post('/create-order', CreateOrderAction::class);
             $g->post('/verify',       VerifyPaymentAction::class);
+            $g->post('/use-credits', UseCreditsAction::class);
         })->add(JwtAuthMiddleware::class);
     });
 };
