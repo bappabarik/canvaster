@@ -106,6 +106,8 @@ class CloudinaryService
         return $uploaded;
     }
 
+    
+
     private function rmDir(string $dir): void
     {
         if (!is_dir($dir)) return;
@@ -115,5 +117,23 @@ class CloudinaryService
             is_dir($path) ? $this->rmDir($path) : unlink($path);
         }
         rmdir($dir);
+    }
+
+   /**
+     * Generate a signed URL to download a folder as a ZIP file.
+     *
+     * @param int $projectId
+     * @return string
+     */
+    public function getZipDownloadUrl(int $projectId): string
+    {
+        $prefix = "bdp/projects/{$projectId}/output/";
+        
+        // Fix: Use uploadApi() instead of archive
+        return $this->cloudinary->uploadApi()->downloadArchiveUrl([
+            'prefixes'         => [$prefix],
+            'target_public_id' => "project_{$projectId}_designs",
+            'resource_type'    => 'image', // Use 'image' since your worker uploads PNGs
+        ]);
     }
 }

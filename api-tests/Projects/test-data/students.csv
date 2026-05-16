@@ -1,6 +1,21 @@
-Student Name,Roll Number,Photo Filename
-John Doe,101,john_doe.jpg
-Jane Smith,102,jane_smith.jpg
-Raj Kumar,103,raj_kumar.jpg
-Priya Patel,104,priya_patel.jpg
-Amit Shah,105,amit_shah.jpg
+Student Name,Roll Number,Photo Filename,Class,Phone,Date
+John Doe,101,john_doe.jpg,XII,9870496580,08.10.2022
+Jane Smith,102,jane_smith.jpg,XII,8972654321,08.10.2022
+Raj Kumar,103,raj_kumar.jpg,XII,6987305831,08.10.2022
+Priya Patel,104,priya_patel.jpg,XII,9084653421,08.10.2022
+Amit Shah,105,amit_shah.jpg,XII,9800907645,08.10.2022
+Bappa Barik,106,bappa_barik.jpg,XII,8597305824,08.10.2022
+Omar Faruk,107,omar_faruk.jpg,XII,6789054632,08.10.2022
+Jafar Sarif,108,jafar_sarif.jpg,XII,8790658721,08.10.2022
+Hritik Raj,109,hritik_raj.jpg,XII,9039786543,08.10.2022
+Md. Sarfraj Manjar,110,md_manjar.jpg,XII,8874321097,08.10.2022
+Souvik Ghosh,111,souvik_ghosh.jpg,XII,9800901746,08.10.2022
+Subhojyoti Das,112,subhojyoti_das.jpg,XII,8569304521,08.10.2022
+Koushik Patra,113,koushik_patra.jpg,XII,8966512323,08.10.2022
+Madhu Barik,114,madhu_barik.jpg,XII,6505542784,08.10.2022
+Anushree Barik,115,anushree_barik.jpg,XII,8972341291,08.10.2022
+Tanushree Barik,116,tanushree_barik.jpg,XII,8709321569,08.10.2022
+Krishanu Adhikary,117,krishanu_adhikary.jpg,XII,8807469312,08.10.2022
+Mala Barik,118,mala_barik.jpg,XII,9079652319,08.10.2022
+Sutapa Barik,119,sutapa_barik.jpg,XII,6703459821,08.10.2022
+Nisha Saha,120,nisha_saha.jpg,XII,9043298710,08.10.2022

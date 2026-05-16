@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace App\Application\Actions\Project;
@@ -35,7 +36,7 @@ class CreateProjectAction extends Action
             [
                 'name'          => v::notEmpty()->stringType()->length(1, 150),
                 'template_id'   => v::notEmpty()->intType()->positive(),
-                'output_format' => v::optional(v::in(['pdf','png','zip_pdf','zip_png'])),
+                'output_format' => v::optional(v::in(['pdf', 'png', 'zip_pdf', 'zip_png'])),
             ]
         );
 
@@ -44,16 +45,28 @@ class CreateProjectAction extends Action
             throw new HttpNotFoundException($this->request, 'Template not found');
         }
 
-        // Template must be public OR owned by the user
         if (!$template->isPublic() && $template->getUserId() !== $user->getId()) {
             throw new HttpBadRequestException($this->request, 'Template not accessible');
         }
 
-        // Snapshot the canvas at project creation time — critical
+        // Embed width/height into the canvas snapshot JSON so the renderer
+        // always uses the correct dimensions regardless of template edits
+        $canvasJson = $template->getCanvasJson();
+        $canvasData = json_decode($canvasJson, true);
+
+        if (!is_array($canvasData)) {
+            throw new HttpBadRequestException($this->request, 'Template has invalid canvas JSON');
+        }
+
+        // Freeze the dimensions into the snapshot — renderer uses these,
+        // not the live template dimensions which may change later
+        $canvasData['_bdp_width']  = $template->getWidthPx();
+        $canvasData['_bdp_height'] = $template->getHeightPx();
+
         $project = $this->projects->create([
             'user_id'               => $user->getId(),
             'template_id'           => $template->getId(),
-            'canvas_snapshot_json'  => $template->getCanvasJson(),
+            'canvas_snapshot_json'  => json_encode($canvasData),
             'placeholders_snapshot' => $template->getPlaceholders(),
             'name'                  => $data['name'],
             'output_format'         => $data['output_format'] ?? 'zip_png',

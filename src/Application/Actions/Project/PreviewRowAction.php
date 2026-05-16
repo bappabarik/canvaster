@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace App\Application\Actions\Project;
@@ -97,14 +98,18 @@ class PreviewRowAction extends Action
             }
         }
 
+        // After resolving the row data, extract frozen dimensions from snapshot
+        $canvasData = json_decode($project->getCanvasSnapshotJson(), true) ?? [];
+        $widthPx    = $canvasData['_bdp_width']  ?? 800;
+        $heightPx   = $canvasData['_bdp_height'] ?? 600;
+
         return $this->respondWithData([
             'row_index'            => $rowIndex,
             'total_rows'           => $project->getTotalRows(),
             'resolved_data'        => $resolved,
-            'image_map'            => $imageMap,
             'canvas_snapshot_json' => $project->getCanvasSnapshotJson(),
-            'width_px'             => 800,  // will be read from template in future
-            'height_px'            => 500,
+            'width_px'             => $widthPx,   // ← frozen at creation, not live template
+            'height_px'            => $heightPx,
         ]);
     }
 }

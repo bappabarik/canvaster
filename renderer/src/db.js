@@ -42,7 +42,6 @@ function getPool() {
 async function claimNextJob() {
     const db = getPool();
 
-    // Atomic claim: only one worker wins if multiple are running
     const [result] = await db.execute(
         `UPDATE generation_jobs
          SET status = 'processing', started_at = NOW()
@@ -53,7 +52,6 @@ async function claimNextJob() {
 
     if (result.affectedRows === 0) return null;
 
-    // Fetch the job we just claimed
     const [rows] = await db.execute(
         `SELECT gj.*, p.canvas_snapshot_json, p.placeholders_snapshot,
                 p.column_map, p.output_format, p.total_rows, p.user_id,
@@ -68,7 +66,20 @@ async function claimNextJob() {
          LIMIT 1`
     );
 
-    return rows[0] ?? null;
+    const job = rows[0] ?? null;
+
+    if (job && job.canvas_snapshot_json) {
+        // Prefer dimensions frozen into the snapshot at project creation time.
+        // Fall back to current template dimensions if the snapshot predates this fix.
+        const snapshot = typeof job.canvas_snapshot_json === 'string'
+            ? JSON.parse(job.canvas_snapshot_json)
+            : job.canvas_snapshot_json;
+
+        if (snapshot._bdp_width)  job.width_px  = snapshot._bdp_width;
+        if (snapshot._bdp_height) job.height_px = snapshot._bdp_height;
+    }
+
+    return job;
 }
 
 /**

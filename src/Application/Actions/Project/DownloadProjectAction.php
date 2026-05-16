@@ -5,38 +5,19 @@ namespace App\Application\Actions\Project;
 
 use App\Application\Actions\Action;
 use App\Domain\Project\ProjectRepository;
+use App\Application\Services\CloudinaryService; // <-- Add this import
 use App\Domain\User\User;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Log\LoggerInterface;
 use Slim\Exception\HttpBadRequestException;
 use Slim\Exception\HttpNotFoundException;
 
-/**
- * GET /projects/{id}/download
- *
- * Returns the download URL for a completed project's output ZIP.
- * Does NOT redirect — returns JSON so the frontend can handle it
- * (open in new tab, show a button, etc.).
- *
- * Only available when project status = 'done'.
- *
- * Response shape:
- * {
- *   "project_id": 1,
- *   "project_name": "Class 10A ID Cards",
- *   "output_format": "zip_png",
- *   "total_rows": 5,
- *   "rows_done": 5,
- *   "rows_failed": 0,
- *   "download_url": "https://res.cloudinary.com/...",
- *   "completed_at": "2024-01-15 10:30:00"
- * }
- */
 class DownloadProjectAction extends Action
 {
     public function __construct(
         LoggerInterface         $logger,
         private ProjectRepository $projects,
+        private CloudinaryService $cloudinaryService // <-- Inject the service here
     ) {
         parent::__construct($logger);
     }
@@ -62,12 +43,8 @@ class DownloadProjectAction extends Action
 
         $job = $this->projects->getJob($projectId);
 
-        if (!$job || empty($job['output_zip_path'])) {
-            throw new HttpNotFoundException(
-                $this->request,
-                'Output file not found — the job may still be processing'
-            );
-        }
+        // Generate the official Cloudinary ZIP URL dynamically
+        $downloadUrl = $this->cloudinaryService->getZipDownloadUrl($projectId);
 
         return $this->respondWithData([
             'project_id'    => $project->getId(),
@@ -76,8 +53,8 @@ class DownloadProjectAction extends Action
             'total_rows'    => $project->getTotalRows(),
             'rows_done'     => (int) ($job['rows_done']   ?? 0),
             'rows_failed'   => (int) ($job['rows_failed']  ?? 0),
-            'download_url'  => $job['output_zip_path'],
-            'completed_at'  => $job['completed_at'],
+            'download_url'  => $downloadUrl, // <-- Use the newly generated URL
+            'completed_at'  => $job['completed_at'] ?? null,
         ]);
     }
 }

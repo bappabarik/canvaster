@@ -29,6 +29,8 @@ class Template implements JsonSerializable
     public function getCanvasJson(): string { return $this->canvasJson; }
     public function getPlaceholders(): array { return $this->placeholders; }
     public function isPublic(): bool       { return $this->isPublic; }
+    public function getWidthPx(): int       { return $this->widthPx; }
+    public function getHeightPx(): int       { return $this->heightPx; }
 
     public function jsonSerialize(): array
     {

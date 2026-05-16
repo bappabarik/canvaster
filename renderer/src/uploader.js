@@ -46,12 +46,12 @@ async function uploadOutput(localPath, projectId, rowIndex, format) {
  */
 async function uploadZip(localPath, projectId) {
     const result = await cloudinary.uploader.upload(localPath, {
-        folder:          `bdp/projects/${projectId}`,
-        public_id:       'output_bundle',
-        resource_type:   'raw',
-        use_filename:    false,
-        unique_filename: false,
-        overwrite:       true,
+        folder: `bdp/projects/${projectId}`,
+        public_id: 'output_bundle',
+        resource_type: 'raw',
+        type: 'upload',
+        access_mode: 'public',
+        overwrite: true,
     });
 
     return result.secure_url;

@@ -7,20 +7,6 @@ use RuntimeException;
 
 class CsvParser
 {
-    /**
-     * Parse a CSV file into rows keyed by header.
-     * Handles large files via SplFileObject streaming — never loads full file into memory.
-     *
-     * Returns:
-     * [
-     *   'headers' => ['Name', 'Roll No', 'Photo'],
-     *   'rows'    => [
-     *     ['row_index' => 0, 'data' => ['Name' => 'John', 'Roll No' => '101', 'Photo' => 'john.jpg']],
-     *     ...
-     *   ],
-     *   'total'   => 250,
-     * ]
-     */
     public function parse(string $filePath): array
     {
         if (!file_exists($filePath)) {
@@ -36,12 +22,21 @@ class CsvParser
 
         // First row = headers
         $headers = $file->current();
-        if (!$headers || count($headers) === 0) {
+
+        // Guard: current() can return false if file is empty
+        if (!is_array($headers) || count($headers) === 0) {
             throw new RuntimeException('CSV file is empty or has no headers');
         }
 
         // Trim BOM and whitespace from headers
-        $headers = array_map(fn($h) => trim(ltrim($h, "\xEF\xBB\xBF")), $headers);
+        $headers = array_map(fn($h) => trim(ltrim((string) $h, "\xEF\xBB\xBF")), $headers);
+
+        // Remove any empty header columns (trailing commas in header row)
+        $headers = array_values(array_filter($headers, fn($h) => $h !== ''));
+
+        if (count($headers) === 0) {
+            throw new RuntimeException('CSV header row has no valid column names');
+        }
 
         if (count(array_unique($headers)) !== count($headers)) {
             throw new RuntimeException('CSV has duplicate column headers');
@@ -49,19 +44,32 @@ class CsvParser
 
         $file->next();
 
-        $rows      = [];
-        $rowIndex  = 0;
+        $rows        = [];
+        $rowIndex    = 0;
         $headerCount = count($headers);
 
         while (!$file->eof()) {
             $line = $file->current();
             $file->next();
 
-            // Skip completely blank lines
-            if ($line === null || $line === [null]) continue;
+            // SKIP_EMPTY can still yield false, null, or [null] — guard all cases
+            if (!is_array($line) || $line === [null]) {
+                continue;
+            }
 
-            // Pad or trim to match header count
-            $line = array_slice(array_pad($line, $headerCount, ''), 0, $headerCount);
+            // Skip rows that are entirely empty strings
+            $hasContent = array_filter($line, fn($cell) => trim((string) $cell) !== '');
+            if (count($hasContent) === 0) {
+                continue;
+            }
+
+            // Normalize to header column count — array_pad is now safe because
+            // we've confirmed $line is a real array above
+            $line = array_slice(
+                array_pad($line, $headerCount, ''),
+                0,
+                $headerCount
+            );
 
             $rows[] = [
                 'row_index' => $rowIndex,

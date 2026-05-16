@@ -5,6 +5,7 @@ namespace App\Application\Actions\Template;
 
 use App\Application\Actions\Action;
 use App\Application\Services\PlaceholderExtractor;
+use App\Application\Services\CloudinaryService; // 1. Added this import
 use App\Application\Validation\RequestValidator;
 use App\Domain\Template\TemplateRepository;
 use App\Domain\User\User;
@@ -21,6 +22,7 @@ class UpdateTemplateAction extends Action
         private TemplateRepository   $templates,
         private PlaceholderExtractor $extractor,
         private RequestValidator     $validator,
+        private CloudinaryService    $cloudinaryService // 2. Injected the service here
     ) {
         parent::__construct($logger);
     }
@@ -43,22 +45,37 @@ class UpdateTemplateAction extends Action
         $data = $this->validator->validate(
             (array) $this->request->getParsedBody(),
             [
-                'name'          => v::optional(v::stringType()->length(1, 150)),
-                'category'      => v::optional(v::in([
+                'name'             => v::optional(v::stringType()->length(1, 150)),
+                'category'         => v::optional(v::in([
                     'id_card','certificate','invite','badge',
                     'business_card','ticket','label','other',
                 ])),
-                'canvas_json'   => v::optional(v::stringType()),
-                'width_px'      => v::optional(v::intType()->positive()),
-                'height_px'     => v::optional(v::intType()->positive()),
-                'thumbnail_url' => v::optional(v::url()),
-                'is_public'     => v::optional(v::boolType()),
+                'canvas_json'      => v::optional(v::stringType()),
+                'width_px'         => v::optional(v::intType()->positive()),
+                'height_px'        => v::optional(v::intType()->positive()),
+                'is_public'        => v::optional(v::boolType()),
+                'thumbnail_base64' => v::optional(v::stringType()), // 3. Accept base64 string
             ]
         );
 
         // Re-extract placeholders if canvas changed
         if (isset($data['canvas_json'])) {
             $data['placeholders'] = $this->extractor->extract($data['canvas_json']);
+        }
+
+        // 4. Handle Cloudinary Upload if a new thumbnail was sent
+        if (!empty($data['thumbnail_base64'])) {
+            $uploadResult = $this->cloudinaryService->upload(
+                $data['thumbnail_base64'], // Base64 string from React
+                'bdp/templates/thumbnails',
+                uniqid('thumb_')
+            );
+            
+            // Set the generated secure URL in the data array
+            $data['thumbnail_url'] = $uploadResult['secure_url'];
+            
+            // Remove the base64 string from data so it doesn't try to save to the DB
+            unset($data['thumbnail_base64']);
         }
 
         $updated = $this->templates->update($id, $data);

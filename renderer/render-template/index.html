@@ -3,200 +3,386 @@
   <head>
     <meta charset="UTF-8" />
     <title>BDP Renderer</title>
+
     <script src="./fabric.min.js"></script>
+
     <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body { background: white; overflow: hidden; }
-      canvas { display: block; }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        overflow: hidden;
+        background: transparent;
+      }
+
+      canvas {
+        display: block;
+      }
     </style>
   </head>
+
   <body>
     <canvas id="c"></canvas>
+
     <script>
-      window.__bdpDone         = null;
+      window.__bdpDone = null;
       window.__bdpFabricCanvas = null;
 
-      const BLANK_PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+      const BLANK_PNG =
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
-      // Pre-patch: replace {"src":"{photo}"} with blank PNG so Fabric loads it
-      // and store the original placeholder key in _placeholderSrc
+      // ─────────────────────────────────────────────
+      // PATCH PLACEHOLDER JSON
+      // ─────────────────────────────────────────────
       function patchJson(json) {
         return json.replace(
           /"src"\s*:\s*"(\{[a-zA-Z_][a-zA-Z0-9_]*\})"/g,
-          (_, ph) => `"src":"${BLANK_PNG}","_placeholderSrc":"${ph}"`
+          (_, ph) =>
+            `"src":"${BLANK_PNG}","_placeholderSrc":"${ph}"`
         );
       }
 
+      // ─────────────────────────────────────────────
+      // LOAD IMAGE
+      // ─────────────────────────────────────────────
       function loadImage(url) {
-        return new Promise(resolve => {
-          fabric.Image.fromURL(url, img => resolve(img || null), { crossOrigin: "anonymous" });
+        return new Promise((resolve) => {
+          fabric.Image.fromURL(
+            url,
+            (img) => resolve(img || null),
+            {
+              crossOrigin: "anonymous",
+            }
+          );
         });
       }
 
-      // Resolve placeholder key → cloudinary URL
+      // ─────────────────────────────────────────────
+      // RESOLVE IMAGE URL
+      // ─────────────────────────────────────────────
       function resolveImageUrl(key, resolvedData, imageMap) {
         const val = String(resolvedData[key] || "");
-        if (val.startsWith("http://") || val.startsWith("https://")) return val;
-        if (val && imageMap[val]) return imageMap[val];
+
+        if (
+          val.startsWith("http://") ||
+          val.startsWith("https://")
+        ) {
+          return val;
+        }
+
+        if (val && imageMap[val]) {
+          return imageMap[val];
+        }
+
         return null;
       }
 
-      // Swap a placeholder object for a real image, clipped to the placeholder bounds
-      async function swapImage(fabricCanvas, targetObj, imageUrl, bounds) {
+      // ─────────────────────────────────────────────
+      // IMAGE SWAP
+      // ─────────────────────────────────────────────
+      async function swapImage(
+        fabricCanvas,
+        targetObj,
+        imageUrl,
+        bounds
+      ) {
         const img = await loadImage(imageUrl);
-        if (!img) { console.warn("[bdp] Failed to load: " + imageUrl); return; }
 
-        // COVER: scale to fill the bounding box
-        const scaleX = bounds.width  / img.width;
+        if (!img) {
+          console.warn("[bdp] Failed image:", imageUrl);
+          return;
+        }
+
+        // CONTAIN FIT
+        const scaleX = bounds.width / img.width;
         const scaleY = bounds.height / img.height;
-        const scale  = Math.max(scaleX, scaleY);
 
-        const scaledW = img.width  * scale;
+        const scale = Math.min(scaleX, scaleY);
+
+        const scaledW = img.width * scale;
         const scaledH = img.height * scale;
 
-        // Center the scaled image inside the bounding box
         img.set({
-          left:    bounds.left - (scaledW - bounds.width)  / 2,
-          top:     bounds.top  - (scaledH - bounds.height) / 2,
-          scaleX:  scale,
-          scaleY:  scale,
-          angle:   0,
+          left:
+            bounds.left +
+            (bounds.width - scaledW) / 2,
+
+          top:
+            bounds.top +
+            (bounds.height - scaledH) / 2,
+
+          scaleX: scale,
+          scaleY: scale,
+
           originX: "left",
           originY: "top",
-          opacity: targetObj.opacity !== undefined ? targetObj.opacity : 1,
+
+          selectable: false,
+          evented: false,
+
+          objectCaching: false,
+          imageSmoothing: true,
+          dirty: true,
+
+          opacity:
+            targetObj.opacity !== undefined
+              ? targetObj.opacity
+              : 1,
         });
 
-        // Clip to the exact placeholder bounding box
-        img.clipPath = new fabric.Rect({
-          left:             bounds.left,
-          top:              bounds.top,
-          width:            bounds.width,
-          height:           bounds.height,
-          originX:          "left",
-          originY:          "top",
-          absolutePositioned: true,   // ← critical: coords are canvas-absolute
-        });
+        const idx = fabricCanvas
+          .getObjects()
+          .indexOf(targetObj);
 
-        const idx = fabricCanvas.getObjects().indexOf(targetObj);
         fabricCanvas.remove(targetObj);
-        fabricCanvas.insertAt(img, idx >= 0 ? idx : fabricCanvas.getObjects().length);
-        console.log("[bdp] Image swapped at index " + idx + " bounds=" + JSON.stringify(bounds));
+
+        fabricCanvas.insertAt(
+          img,
+          idx >= 0
+            ? idx
+            : fabricCanvas.getObjects().length,
+          false
+        );
       }
 
-      window.renderRow = async function(job) {
+      // ─────────────────────────────────────────────
+      // MAIN RENDER
+      // ─────────────────────────────────────────────
+      window.renderRow = async function (job) {
         try {
-          const { canvasJson, resolvedData, width, height, imageMap = {} } = job;
+          const {
+            canvasJson,
+            resolvedData,
+            width,
+            height,
+            imageMap = {},
+          } = job;
 
-          console.log("[bdp] renderRow called, width=" + width + " height=" + height);
-          console.log("[bdp] resolvedData keys: " + Object.keys(resolvedData).join(", "));
-          console.log("[bdp] imageMap keys: " + Object.keys(imageMap).join(", "));
+          // FIX PAGE SIZE
+          document.documentElement.style.width =
+            width + "px";
 
-          // Size page
-          document.documentElement.style.width  = width  + "px";
-          document.documentElement.style.height = height + "px";
-          document.body.style.width             = width  + "px";
-          document.body.style.height            = height + "px";
+          document.documentElement.style.height =
+            height + "px";
 
-          // Patch placeholder srcs before loading
-          const patched = patchJson(canvasJson);
-          console.log("[bdp] Loading canvas JSON, length=" + patched.length);
+          document.body.style.width =
+            width + "px";
 
-          // Init canvas
-          const canvasEl = document.getElementById("c");
-          canvasEl.width  = width;
+          document.body.style.height =
+            height + "px";
+
+          // FIX CANVAS
+          const canvasEl =
+            document.getElementById("c");
+
+          canvasEl.width = width;
           canvasEl.height = height;
 
-          const fc = new fabric.Canvas("c", {
-            width, height,
+          // IMPORTANT:
+          // DO NOT APPLY CSS WIDTH/HEIGHT
+          // OTHERWISE BROWSER SCALES IT
+
+          const patched = patchJson(canvasJson);
+
+          // STATIC CANVAS = SHARP EXPORTS
+          const fc = new fabric.StaticCanvas("c", {
+            width,
+            height,
+
             renderOnAddRemove: false,
-            selection:         false,
-            skipTargetFind:    true,
+
+            selection: false,
+
+            enableRetinaScaling: true,
+
+            imageSmoothingEnabled: true,
+
+            preserveObjectStacking: true,
           });
+
           window.__bdpFabricCanvas = fc;
 
-          // Load JSON
-          await new Promise((resolve, reject) => {
-            fc.loadFromJSON(patched, resolve, (o, obj) => {
-              if (!obj) console.warn("[bdp] Failed to deserialise: " + JSON.stringify(o).slice(0, 120));
-            });
+          // LOAD TEMPLATE
+          await new Promise((resolve) => {
+            fc.loadFromJSON(patched, resolve);
           });
 
-          console.log("[bdp] loadFromJSON complete, objects=" + fc.getObjects().length);
+          // ───────────────────────────
+          // TEXT REPLACEMENTS
+          // ───────────────────────────
+          const textRe =
+            /\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
 
-          const textRe   = /\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
-          const objects  = fc.getObjects();
-          const swaps    = [];
+          const swaps = [];
 
-          for (const obj of objects) {
-
-            // ── Text ────────────────────────────────────────────────────────────
-            if (obj.type === "textbox" || obj.type === "text" || obj.type === "i-text") {
+          for (const obj of fc.getObjects()) {
+            // TEXT
+            if (
+              obj.type === "textbox" ||
+              obj.type === "text" ||
+              obj.type === "i-text"
+            ) {
               const original = obj.text || "";
-              const replaced = original.replace(textRe, (_, key) =>
-                key in resolvedData ? String(resolvedData[key] ?? "") : `{${key}}`
+
+              const replaced = original.replace(
+                textRe,
+                (_, key) =>
+                  key in resolvedData
+                    ? String(
+                        resolvedData[key] ?? ""
+                      )
+                    : `{${key}}`
               );
+
               if (replaced !== original) {
-                obj.set("text", replaced);
-                console.log("[bdp] Text replaced → \"" + replaced.slice(0, 60) + "\"");
+                obj.set({
+                  text: replaced,
+                  dirty: true,
+                });
               }
+
+              obj.set({
+                objectCaching: false,
+              });
             }
 
-            // ── Image: plain {"type":"image","src":"{photo}"} ─────────────────
-            // After patchJson, _placeholderSrc holds the original {key}
+            // IMAGE PLACEHOLDER
             if (obj.type === "image") {
-              const ph = obj._placeholderSrc || obj.get("_placeholderSrc") || "";
-              const keyMatch = ph.match(/^\{([a-zA-Z_][a-zA-Z0-9_]*)\}$/);
+              const ph =
+                obj._placeholderSrc ||
+                obj.get("_placeholderSrc") ||
+                "";
+
+              const keyMatch = ph.match(
+                /^\{([a-zA-Z_][a-zA-Z0-9_]*)\}$/
+              );
+
               if (!keyMatch) continue;
 
               const key = keyMatch[1];
-              const imageUrl = resolveImageUrl(key, resolvedData, imageMap);
-              console.log("[bdp] Image placeholder {" + key + "} → " + (imageUrl || "(no URL)"));
+
+              const imageUrl =
+                resolveImageUrl(
+                  key,
+                  resolvedData,
+                  imageMap
+                );
+
               if (!imageUrl) continue;
 
               const bounds = {
-                left:   obj.left,
-                top:    obj.top,
-                width:  (obj.width  || 180) * (obj.scaleX || 1),
-                height: (obj.height || 220) * (obj.scaleY || 1),
+                left: obj.left,
+
+                top: obj.top,
+
+                width:
+                  (obj.width || 100) *
+                  (obj.scaleX || 1),
+
+                height:
+                  (obj.height || 100) *
+                  (obj.scaleY || 1),
               };
 
-              swaps.push(swapImage(fc, obj, imageUrl, bounds));
+              swaps.push(
+                swapImage(
+                  fc,
+                  obj,
+                  imageUrl,
+                  bounds
+                )
+              );
             }
 
-            // ── Group: {"type":"group","_isImagePlaceholder":true} ────────────
-            // Created by the editor's addImagePlaceholder() function
-            if (obj.type === "group" && (obj._isImagePlaceholder || obj._placeholderKey)) {
-              const key = obj._placeholderKey || obj.get("_placeholderKey");
+            // GROUP PLACEHOLDER
+            if (
+              obj.type === "group" &&
+              (
+                obj._isImagePlaceholder ||
+                obj._placeholderKey
+              )
+            ) {
+              const key =
+                obj._placeholderKey ||
+                obj.get("_placeholderKey");
+
               if (!key) continue;
 
-              const imageUrl = resolveImageUrl(key, resolvedData, imageMap);
-              console.log("[bdp] Group placeholder {" + key + "} → " + (imageUrl || "(no URL)"));
+              const imageUrl =
+                resolveImageUrl(
+                  key,
+                  resolvedData,
+                  imageMap
+                );
+
               if (!imageUrl) continue;
 
-              // getBoundingRect returns absolute canvas coords — exactly what we need
-              const br = obj.getBoundingRect(true, true);
-              const bounds = {
-                left:   br.left,
-                top:    br.top,
-                width:  br.width,
-                height: br.height,
-              };
+              const br =
+                obj.getBoundingRect(true, true);
 
-              swaps.push(swapImage(fc, obj, imageUrl, bounds));
+              swaps.push(
+                swapImage(
+                  fc,
+                  obj,
+                  imageUrl,
+                  {
+                    left: br.left,
+                    top: br.top,
+                    width: br.width,
+                    height: br.height,
+                  }
+                )
+              );
             }
           }
 
+          // WAIT ALL IMAGES
           await Promise.all(swaps);
 
+          // WAIT FONTS
+          await document.fonts.ready;
+
+          // FORCE FULL RENDER
           fc.renderAll();
-          console.log("[bdp] Render complete, objects=" + fc.getObjects().length);
-          window.__bdpDone = { ok: true };
+
+          await new Promise((resolve) =>
+            requestAnimationFrame(resolve)
+          );
+
+          window.__bdpDone = {
+            ok: true,
+          };
 
         } catch (err) {
-          const msg = err && err.message ? err.message : String(err);
-          console.error("[bdp] RENDER ERROR: " + msg);
-          window.__bdpDone = { ok: false, error: msg };
+          console.error(err);
+
+          window.__bdpDone = {
+            ok: false,
+            error:
+              err?.message || String(err),
+          };
         }
+      };
+
+      // ─────────────────────────────────────────────
+      // REAL HD EXPORT
+      // ─────────────────────────────────────────────
+      window.exportCanvas = function () {
+        const fc = window.__bdpFabricCanvas;
+
+        return fc.toDataURL({
+          format: "png",
+
+          quality: 1,
+
+          multiplier: 4,
+
+          enableRetinaScaling: true,
+        });
       };
     </script>
   </body>

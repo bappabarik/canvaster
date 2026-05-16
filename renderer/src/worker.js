@@ -129,22 +129,22 @@ async function processJob(job) {
         }
 
         // ── Bundle outputs into a ZIP ─────────────────────────────────────────
-        let zipCloudinaryUrl = null;
+        // let zipCloudinaryUrl = null;
 
-        if (outputFiles.length > 0) {
-            const zipPath = path.join(jobTmpDir, `project_${projectId}_output.zip`);
+        // if (outputFiles.length > 0) {
+        //     const zipPath = path.join(jobTmpDir, `project_${projectId}_output.zip`);
 
-            info('Creating ZIP', { jobId, fileCount: outputFiles.length });
+        //     info('Creating ZIP', { jobId, fileCount: outputFiles.length });
 
-            await createZip(
-                outputFiles.map(f => ({ filePath: f.filePath, archiveName: f.archiveName })),
-                zipPath
-            );
+        //     await createZip(
+        //         outputFiles.map(f => ({ filePath: f.filePath, archiveName: f.archiveName })),
+        //         zipPath
+        //     );
 
-            zipCloudinaryUrl = await uploadZip(zipPath, projectId);
+        //     zipCloudinaryUrl = await uploadZip(zipPath, projectId);
 
-            info('ZIP uploaded', { jobId, zipCloudinaryUrl });
-        }
+        //     info('ZIP uploaded', { jobId, zipCloudinaryUrl });
+        // }
 
         // ── Finalize ──────────────────────────────────────────────────────────
         const jobStatus     = rowsFailed === 0 ? 'done' : (rowsDone === 0 ? 'failed' : 'done');
