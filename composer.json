@@ -31,7 +31,7 @@
         "razorpay/razorpay": "2.9",
         "respect/validation": "2.4",
         "slim/psr7": "1.5",
-        "slim/slim": "4.10",
+        "slim/slim": "4.15.3",
         "vlucas/phpdotenv": "5.6"
     },
     "require-dev": {
