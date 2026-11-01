@@ -25,7 +25,7 @@
         "php": "^7.4 || ^8.0",
         "ext-json": "*",
         "cloudinary/cloudinary_php": "^3.1",
-        "firebase/php-jwt": "7.0",
+        "firebase/php-jwt": "7.2.1",
         "monolog/monolog": "2.8",
         "php-di/php-di": "6.4",
         "razorpay/razorpay": "2.9",
