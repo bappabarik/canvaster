@@ -24,7 +24,7 @@
     "require": {
         "php": "^7.4 || ^8.0",
         "ext-json": "*",
-        "cloudinary/cloudinary_php": "^3.1",
+        "cloudinary/cloudinary_php": "^3.3",
         "firebase/php-jwt": "7.0",
         "monolog/monolog": "2.8",
         "php-di/php-di": "6.4",
