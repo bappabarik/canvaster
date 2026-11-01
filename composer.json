@@ -26,7 +26,7 @@
         "ext-json": "*",
         "cloudinary/cloudinary_php": "^3.1",
         "firebase/php-jwt": "7.0",
-        "monolog/monolog": "2.8",
+        "monolog/monolog": "3.12.1",
         "php-di/php-di": "6.4",
         "razorpay/razorpay": "2.9",
         "respect/validation": "2.4",
