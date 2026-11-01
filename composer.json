@@ -30,7 +30,7 @@
         "php-di/php-di": "6.4",
         "razorpay/razorpay": "2.9",
         "respect/validation": "2.4",
-        "slim/psr7": "1.5",
+        "slim/psr7": "1.8.0",
         "slim/slim": "4.10",
         "vlucas/phpdotenv": "5.6"
     },
